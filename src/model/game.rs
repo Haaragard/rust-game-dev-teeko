@@ -1,5 +1,3 @@
-use std::ops::DerefMut;
-
 use crate::common::common::{Message, System};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -31,13 +29,13 @@ impl GameState {
     }
 
     pub fn update(&mut self) {
-        for message in self.system.message_queue.iter_mut() {
+        for i in 0..self.system.message_queue.len() {
+            let message = self.system.message_queue[i];
             match message {
-                // Message::DropPiece(row, col) => self.handle_click(*row, *col),
-                // Message::DoMove => self.redo_actio;n(),
+                Message::DropPiece(row, col) => self.handle_click(row, col),
+                Message::DoMove => self.redo_action(),
                 Message::UndoMove => self.undo_action(),
-                _ => panic!("Not implemented"),
-            };
+            }
         }
     }
 
