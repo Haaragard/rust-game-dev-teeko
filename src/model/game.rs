@@ -7,13 +7,13 @@ pub enum BoardPiece {
     Black,
 }
 
-pub struct GameState {
+pub struct GameState  {
     pub board: [[BoardPiece; 5]; 5],
     pub current_player: BoardPiece,
     pub pieces_dropped: [i32; 2],
+    pub system: System,
     history: Vec<PieceDropCommand>,
     history_pos: usize,
-    pub system: System,
 }
 
 impl GameState {
@@ -22,15 +22,22 @@ impl GameState {
             board: [[BoardPiece::None; 5]; 5],
             current_player: BoardPiece::Red,
             pieces_dropped: [0, 0],
+            system: System::new(),
             history: Vec::new(),
             history_pos: 0,
-            system: System::new(),
         }
     }
 
     pub fn update(&mut self) {
-        for i in 0..self.system.message_queue.len() {
-            let message = self.system.message_queue[i];
+        let messages = {
+            let mut message_queue = self.system.message_queue.borrow_mut();
+            let messages = message_queue.clone();
+
+            message_queue.clear();
+            messages
+        };
+
+        for message in messages {
             match message {
                 Message::DropPiece(row, col) => self.handle_click(row, col),
                 Message::DoMove => self.redo_action(),
@@ -39,7 +46,7 @@ impl GameState {
         }
     }
 
-    pub fn handle_click(&mut self, row: usize, col: usize) {
+    fn handle_click(&mut self, row: usize, col: usize) {
         let command = PieceDropCommand {
             row,
             col,
@@ -60,6 +67,8 @@ impl GameState {
         command.perform(self);
         self.history.push(command);
         self.history_pos += 1;
+
+        self.system.publish(Message::DoMove);
     }
 
     pub fn redo_action(&mut self) {
@@ -71,6 +80,8 @@ impl GameState {
         command.perform(self);
 
         self.history_pos += 1;
+
+        self.system.publish(Message::DoMove);
     }
 
     pub fn undo_action(&mut self) {
@@ -80,6 +91,8 @@ impl GameState {
 
         let command: PieceDropCommand = self.history[self.history_pos - 1].copy();
         command.undo(self);
+
+        self.system.publish(Message::UndoMove);
 
         if self.history_pos == 0 {
             return;

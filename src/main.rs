@@ -1,11 +1,15 @@
-use sdl2::{mixer, pixels::Color};
+use std::{rc::Rc};
+
+use sdl2::{pixels::Color};
 
 pub mod view;
 
 pub mod model;
-use crate::model::game::{GameState};
+use crate::{audio::audio::AudioSystem, common::common::{Message, System}, model::game::GameState};
 
 pub mod common;
+
+pub mod audio;
 
 const SCREEN_WIDTH: u32 = 800;
 const SCREEN_HEIGHT: u32 = 600;
@@ -33,25 +37,18 @@ fn main() -> Result<(), String> {
 
     let texture_creator = canvas.texture_creator();
 
-    mixer::open_audio(
-        44100,
-        mixer::DEFAULT_FORMAT,
-        2,
-        4096
-    )
-        .expect("Could not open audio system.");
-    let sound_channel = mixer::Channel(0);
-
-    let click_sound = mixer::Chunk::from_file("sfx/click.mp3")
-        .expect("Could not load sound.");
-
     let mut board_view = view::board_view::Renderer::new(
         canvas,
         (SCREEN_WIDTH, SCREEN_HEIGHT),
         &texture_creator
     );
 
-    let mut game_board = GameState::new();
+    let mut system = System::new();
+    let mut game_state = GameState::new();
+    let mut audio_system = AudioSystem::new();
+
+    game_state.system.add_observer(Rc::clone(&audio_system.system.message_queue));
+    system.add_observer(Rc::clone(&game_state.system.message_queue));
 
     let mut event_pump = sdl_context
         .event_pump()
@@ -70,27 +67,23 @@ fn main() -> Result<(), String> {
                     let row: usize = (5 * y / board_view.screen_area.h) as usize;
                     let col: usize = (5 * x / board_view.screen_area.w) as usize;
 
-                    game_board.handle_click(row, col);
-
-                    sound_channel.play(&click_sound, 0)
-                        .expect("Could not play click sound.");
+                    system.publish(Message::DropPiece(row, col));
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::A), ..} => {
-                    game_board.undo_action();
+                    system.publish(Message::UndoMove);
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::D), ..} => {
-                    game_board.redo_action();
-
-                    sound_channel.play(&click_sound, 0)
-                        .expect("Could not play click sound.");
+                    system.publish(Message::DoMove);
                 },
                 _ => {},
             }
         }
 
-        board_view.render(&game_board.board);
+        game_state.update();
+        audio_system.update();
+
+        board_view.render(&game_state.board);
         board_view.canvas.present();
-        // std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 60));
     }
 
     Ok(())
